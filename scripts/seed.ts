@@ -28,7 +28,7 @@ if (!server) {
   db.prepare(`
     INSERT INTO servers (id, name, description, ownerId, iconUrl, publicJoin, vanityCode, theme, createdAt)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(serverId, 'Distopia Official', 'Default official space for first-run testing, onboarding, and compact chat.', ownerId, '/assets/brand/distopia-icon-transparent.webp', 1, 'distopia', 'aurora', nowIso());
+  `).run(serverId, 'Distopia Official', 'Default official space for first-run testing, onboarding, and compact chat.', ownerId, '/assets/brand/distopia-app-icon.webp', 1, 'distopia', 'aurora', nowIso());
   db.prepare('INSERT INTO server_members (serverId, userId, role, nickname, joinedAt) VALUES (?, ?, ?, ?, ?)').run(serverId, ownerId, 'owner', '', nowIso());
   db.prepare('INSERT INTO server_members (serverId, userId, role, nickname, joinedAt) VALUES (?, ?, ?, ?, ?)').run(serverId, novaId, 'member', '', nowIso());
   const general = id();
@@ -48,7 +48,7 @@ if (!server) {
   server = { id: serverId };
 } else {
   db.prepare('UPDATE servers SET name = ?, description = ?, iconUrl = ?, theme = ?, publicJoin = 1 WHERE id = ?')
-    .run('Distopia Official', 'Default official space for first-run testing, onboarding, and compact chat.', '/assets/brand/distopia-icon-transparent.webp', 'aurora', server.id);
+    .run('Distopia Official', 'Default official space for first-run testing, onboarding, and compact chat.', '/assets/brand/distopia-app-icon.webp', 'aurora', server.id);
   db.prepare('INSERT OR IGNORE INTO server_members (serverId, userId, role, nickname, joinedAt) VALUES (?, ?, ?, ?, ?)').run(server.id, ownerId, 'owner', '', nowIso());
   db.prepare('INSERT OR IGNORE INTO server_members (serverId, userId, role, nickname, joinedAt) VALUES (?, ?, ?, ?, ?)').run(server.id, novaId, 'member', '', nowIso());
   db.prepare('INSERT OR IGNORE INTO server_invites (id, serverId, code, createdBy, maxUses, uses, expiresAt, allowGuestJoin, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')

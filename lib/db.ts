@@ -79,6 +79,7 @@ export function ensureSchema(): void {
       id TEXT PRIMARY KEY,
       serverId TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
       type TEXT NOT NULL DEFAULT 'text',
       position INTEGER NOT NULL DEFAULT 0
     );
@@ -89,6 +90,9 @@ export function ensureSchema(): void {
       userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       content TEXT NOT NULL,
       attachmentUrl TEXT NOT NULL DEFAULT '',
+      attachmentName TEXT NOT NULL DEFAULT '',
+      attachmentMime TEXT NOT NULL DEFAULT '',
+      attachmentSize INTEGER NOT NULL DEFAULT 0,
       createdAt TEXT NOT NULL,
       editedAt TEXT NOT NULL DEFAULT '',
       deletedAt INTEGER NOT NULL DEFAULT 0
@@ -133,6 +137,15 @@ export function ensureSchema(): void {
       createdAt TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS message_edits (
+      id TEXT PRIMARY KEY,
+      messageId TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      previousContent TEXT NOT NULL,
+      newContent TEXT NOT NULL,
+      createdAt TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS moderation_events (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL DEFAULT '',
@@ -147,7 +160,19 @@ export function ensureSchema(): void {
     CREATE INDEX IF NOT EXISTS idx_channels_server ON channels(serverId);
     CREATE INDEX IF NOT EXISTS idx_messages_channel_created ON messages(channelId, createdAt);
     CREATE INDEX IF NOT EXISTS idx_friends_user ON friends(requesterId, addresseeId);
+    CREATE INDEX IF NOT EXISTS idx_message_edits_message ON message_edits(messageId, createdAt);
   `);
 }
 
+
+function addColumnIfMissing(table: string, column: string, ddl: string): void {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!rows.some((row) => row.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+
 ensureSchema();
+addColumnIfMissing('channels', 'description', "description TEXT NOT NULL DEFAULT ''");
+addColumnIfMissing('messages', 'attachmentName', "attachmentName TEXT NOT NULL DEFAULT ''");
+addColumnIfMissing('messages', 'attachmentMime', "attachmentMime TEXT NOT NULL DEFAULT ''");
+addColumnIfMissing('messages', 'attachmentSize', "attachmentSize INTEGER NOT NULL DEFAULT 0");
+addColumnIfMissing('messages', 'editedAt', "editedAt TEXT NOT NULL DEFAULT ''");

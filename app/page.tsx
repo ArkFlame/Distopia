@@ -34,7 +34,7 @@ export default function HomePage() {
   return (
     <main className="shell-bg home">
       <section className="hero">
-        <div className="logo-word"><span className="logo-mark"><img src="/assets/brand/distopia-icon-transparent.webp" alt="" /></span> Distopia</div>
+        <div className="logo-word"><span className="logo-mark"><img src="/assets/brand/distopia-app-icon.webp" alt="" /></span> Distopia</div>
         <h1>Compact community chat. No bloat.</h1>
         <p>
           Self-contained servers, channels, friends, profile themes, image uploads, webhooks, privacy toggles, and visible cooldowns. Built as a distinct modern alternative, not a third-party client for another platform.

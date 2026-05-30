@@ -35,3 +35,53 @@ Date: 2026-05-29
 - Browser screenshot required temporarily removing the container Chromium URL block policy, then restoring it after capture.
 - No runtime CDN dependency remains. Static image/icon assets are bundled locally.
 - Chromium/SQLite warnings are environment/API warnings, not build failures.
+
+
+## 2026-05-30 patch validation
+
+Passed in sandbox:
+
+```bash
+node scripts/static-check.mjs
+```
+
+Validated statically:
+
+- New server icon upload endpoint exists.
+- New channel edit endpoint exists.
+- New message attachment delete endpoint exists.
+- SQLite schema includes channel descriptions and attachment metadata columns.
+- Upload library supports images, ZIP files, server-icons CDN bucket, and 8 MB ZIP/image limits.
+- Client includes optimistic message send, attachment chip delete, sent attachment delete, channel/server settings, and compact app icon usage.
+- Generated WebP/PNG/ICO app assets exist.
+
+Not executed in sandbox:
+
+```bash
+pnpm install
+pnpm run build
+```
+
+Reason: sandbox DNS resolution to `registry.npmjs.org` failed while Corepack tried to download pnpm. The scripts remain pnpm-first and include Yarn fallback.
+
+## Message ownership, scroll, and font patch
+
+Static validation performed with:
+
+```bash
+node scripts/static-check.mjs
+```
+
+Covered by static checks and source inspection:
+
+- Message text is now required. Attachment-only sends are rejected client-side and server-side.
+- Sent attachment cards no longer expose attachment delete controls. Only the input attachment chip has an X button.
+- Server owners can delete messages from the hover action bar.
+- Authors can edit their own messages from the hover action bar.
+- Edited messages show `(edited)` after the message content.
+- Edit history is stored in `message_edits` and exposed through `/api/messages/:messageId/history`.
+- Chat layout is fixed to viewport height using `100dvh`, `minmax(0, 1fr)`, and a dedicated `.messages` scroll container.
+- Server icons now use `object-fit: contain` inside left rail bubbles to avoid side cropping.
+- Profile font dropdown now includes additional stylized options including Neon Pulse, Cyber Grid, Arcade, Terminal, Elegant Serif, Street Bold, and Rounded Soft.
+
+Build not run in this sandbox because package install still requires registry access and the environment cannot resolve `registry.npmjs.org`.

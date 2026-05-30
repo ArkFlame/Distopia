@@ -4,8 +4,8 @@ import { db } from '@/lib/db';
 import { fail, ok, clientIp } from '@/lib/http';
 import { moderateMessage } from '@/lib/moderation';
 import { checkRateLimit } from '@/lib/rateLimit';
-import { listMessages, userCanAccessChannel } from '@/lib/queries';
-import { saveImage } from '@/lib/upload';
+import { getMessage, listMessages, userCanAccessChannel } from '@/lib/queries';
+import { saveUpload } from '@/lib/upload';
 import { id, nowIso } from '@/lib/utils';
 
 export const runtime = 'nodejs';
@@ -31,16 +31,25 @@ export async function POST(request: Request, ctx: { params: Promise<{ channelId:
     if (!limit.allowed) return fail('Message cooldown active', 429, limit.rate);
     const form = await request.formData();
     const content = String(form.get('content') || '').trim();
-    const file = form.get('image');
-    if (!content && !(file instanceof File && file.size > 0)) return fail('Message or image required', 400, limit.rate);
-    const moderation = moderateMessage(user.id, channelId, content || '[image]');
+    const file = (form.get('attachment') || form.get('image')) as FormDataEntryValue | null;
+    if (!content) return fail(file instanceof File && file.size > 0 ? 'Write a message before attaching files' : 'Message required', 400, limit.rate);
+    const moderation = moderateMessage(user.id, channelId, content);
     if (!moderation.allowed) return fail(moderation.reason || 'Message blocked', 400, limit.rate);
     let attachmentUrl = '';
-    if (file instanceof File && file.size > 0) attachmentUrl = await saveImage(file, 'message');
+    let attachmentName = '';
+    let attachmentMime = '';
+    let attachmentSize = 0;
+    if (file instanceof File && file.size > 0) {
+      const saved = await saveUpload(file, 'message', { allowImages: true, allowZip: true });
+      attachmentUrl = saved.url;
+      attachmentName = saved.name;
+      attachmentMime = saved.mime;
+      attachmentSize = saved.size;
+    }
     const messageId = id();
-    db.prepare('INSERT INTO messages (id, channelId, userId, content, attachmentUrl, createdAt, editedAt, deletedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(messageId, channelId, user.id, content, attachmentUrl, nowIso(), '', 0);
-    return ok({ messageId, attachmentUrl }, { rate: limit.rate });
+    db.prepare('INSERT INTO messages (id, channelId, userId, content, attachmentUrl, attachmentName, attachmentMime, attachmentSize, createdAt, editedAt, deletedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(messageId, channelId, user.id, content, attachmentUrl, attachmentName, attachmentMime, attachmentSize, nowIso(), '', 0);
+    return ok({ message: getMessage(messageId) }, { rate: limit.rate });
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Message failed');
   }

@@ -26,8 +26,7 @@ export async function POST(request: Request) {
     const body = await readJson(request);
     const name = clampText(body.name, 2, 40, 'name');
     const description = typeof body.description === 'string' ? body.description.trim().slice(0, 180) : '';
-    const theme = typeof body.theme === 'string' ? body.theme : 'obsidian';
-    const serverId = id();
+        const serverId = id();
     const baseSlug = safeSlug(name, 'space');
     let vanity = baseSlug;
     let suffix = 1;
@@ -37,7 +36,7 @@ export async function POST(request: Request) {
     db.exec('BEGIN IMMEDIATE');
     try {
       db.prepare('INSERT INTO servers (id, name, description, ownerId, iconUrl, publicJoin, vanityCode, theme, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-        .run(serverId, name, description, user.id, '', 1, vanity, theme, createdAt);
+        .run(serverId, name, description, user.id, '', 1, vanity, 'obsidian', createdAt);
       db.prepare('INSERT INTO server_members (serverId, userId, role, nickname, joinedAt) VALUES (?, ?, ?, ?, ?)').run(serverId, user.id, 'owner', '', createdAt);
       db.prepare('INSERT INTO channels (id, serverId, name, type, position) VALUES (?, ?, ?, ?, ?)').run(channelId, serverId, 'general', 'text', 0);
       db.exec('COMMIT');

@@ -116,3 +116,26 @@ public/assets/               Bundled WebP/SVG assets
 data/cdn/                    Runtime uploaded-image store served by /cdn/...
 docs/ASSETS.md              Brand/profile asset inventory
 ```
+
+
+## 2026-05-30 fixes
+
+- Channel creation confirmed and extended with optional channel description.
+- Channel settings modal can edit the top-bar channel description.
+- Server settings modal can update server name, description, vanity invite, public joins, and icon.
+- Server creation supports custom icon upload.
+- Server-side upload validation now supports images and ZIP attachments.
+- Message attachments support PNG/JPG/GIF/WEBP and `.zip` up to 8 MB.
+- Client-side image uploads are compressed to WebP before upload for avatars, server icons, and message images.
+- Composer shows selected attachment only when present, with an `×` remove button.
+- Sent message attachments can be removed by the message owner.
+- Message send is optimistic: input/attachment clear immediately, pending messages render dimmed, failed messages render red.
+- Theme selection is user-wide only in profile settings; per-server theme controls were removed from UI.
+- Distopia app icon now uses a compact white-on-dark generated variant for small-size readability.
+
+Upload limits:
+
+```txt
+DISTOPIA_MAX_IMAGE_UPLOAD_BYTES=8388608
+DISTOPIA_MAX_ZIP_UPLOAD_BYTES=8388608
+```

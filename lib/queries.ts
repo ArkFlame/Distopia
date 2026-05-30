@@ -43,18 +43,42 @@ export function listMembers(serverId: string) {
 }
 
 export function listChannels(serverId: string) {
-  return db.prepare('SELECT id, serverId, name, type, position FROM channels WHERE serverId = ? ORDER BY position ASC, name ASC').all(serverId);
+  return db.prepare('SELECT id, serverId, name, description, type, position FROM channels WHERE serverId = ? ORDER BY position ASC, name ASC').all(serverId);
 }
 
 export function listMessages(channelId: string, limit = 80) {
   return db.prepare(`
-    SELECT m.id, m.channelId, m.content, m.attachmentUrl, m.createdAt, u.id as userId, u.username, u.displayName, u.avatarUrl, u.nameColor, u.font
+    SELECT m.id, m.channelId, m.content, m.attachmentUrl, m.attachmentName, m.attachmentMime, m.attachmentSize, m.createdAt, m.editedAt,
+      (SELECT COUNT(*) FROM message_edits me WHERE me.messageId = m.id) as editHistoryCount,
+      u.id as userId, u.username, u.displayName, u.avatarUrl, u.nameColor, u.font
     FROM messages m
     JOIN users u ON u.id = m.userId
     WHERE m.channelId = ? AND m.deletedAt = 0
     ORDER BY m.createdAt DESC
     LIMIT ?
   `).all(channelId, limit).reverse();
+}
+
+
+export function getMessage(messageId: string) {
+  return db.prepare(`
+    SELECT m.id, m.channelId, m.content, m.attachmentUrl, m.attachmentName, m.attachmentMime, m.attachmentSize, m.createdAt, m.editedAt,
+      (SELECT COUNT(*) FROM message_edits me WHERE me.messageId = m.id) as editHistoryCount,
+      u.id as userId, u.username, u.displayName, u.avatarUrl, u.nameColor, u.font
+    FROM messages m
+    JOIN users u ON u.id = m.userId
+    WHERE m.id = ? AND m.deletedAt = 0
+  `).get(messageId);
+}
+
+export function listMessageEdits(messageId: string) {
+  return db.prepare(`
+    SELECT me.id, me.messageId, me.userId, me.previousContent, me.newContent, me.createdAt, u.username, u.displayName
+    FROM message_edits me
+    JOIN users u ON u.id = me.userId
+    WHERE me.messageId = ?
+    ORDER BY me.createdAt DESC
+  `).all(messageId);
 }
 
 export function joinOfficialServer(userId: string): void {

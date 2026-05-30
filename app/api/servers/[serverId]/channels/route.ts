@@ -25,9 +25,10 @@ export async function POST(request: Request, ctx: { params: Promise<{ serverId: 
     const body = await readJson(request);
     const raw = clampText(body.name, 2, 32, 'name');
     const name = safeSlug(raw, 'channel');
+    const description = typeof body.description === 'string' ? body.description.trim().slice(0, 140) : '';
     const position = (db.prepare('SELECT COUNT(*) as count FROM channels WHERE serverId = ?').get(serverId) as { count: number }).count;
     const channelId = id();
-    db.prepare('INSERT INTO channels (id, serverId, name, type, position) VALUES (?, ?, ?, ?, ?)').run(channelId, serverId, name, 'text', position);
+    db.prepare('INSERT INTO channels (id, serverId, name, description, type, position) VALUES (?, ?, ?, ?, ?, ?)').run(channelId, serverId, name, description, 'text', position);
     return ok({ channelId });
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Channel create failed');

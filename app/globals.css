@@ -216,3 +216,57 @@ img { max-width: 100%; }
   .messages { padding: 12px; }
   .home-stage { padding: 14px; }
 }
+
+/* Distopia fixes: attachments, compact logo, settings */
+.message-sending { opacity: .54; }
+.message-failed { opacity: .92; }
+.pending-pill, .failed-pill { font-size: 10px; padding: 2px 6px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.failed-pill { color: #ffb4c2; border-color: rgba(255,93,122,.35); background: rgba(255,93,122,.08); }
+.message-error { color: #ff9bb0; font-size: 12px; margin-top: 4px; }
+.attachment-box { position: relative; width: fit-content; max-width: 100%; margin-top: 8px; }
+.attachment-box .attachment { margin-top: 0; }
+.attachment-remove { position: absolute; top: 7px; right: 7px; width: 24px; height: 24px; border: 1px solid rgba(255,255,255,.16); background: rgba(4,7,13,.82); color: #fff; border-radius: 999px; cursor: pointer; display: grid; place-items: center; line-height: 1; font-weight: 900; }
+.attachment-remove:hover { background: rgba(255,93,122,.82); border-color: rgba(255,255,255,.28); }
+.zip-attachment { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: #dbe4ff; border-radius: 14px; padding: 11px 42px 11px 12px; max-width: min(420px, 100%); overflow-wrap: anywhere; font-size: 13px; }
+.attachment-chip { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: rgba(238,242,255,.74); background: rgba(255,255,255,.035); border: 1px solid var(--line); border-radius: 12px; padding: 6px 7px 6px 10px; margin-bottom: 8px; font-size: 12px; }
+.attachment-chip span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.attachment-chip button { flex: 0 0 auto; width: 22px; height: 22px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.04); color: var(--text); cursor: pointer; line-height: 1; }
+.attachment-chip button:hover { background: rgba(255,93,122,.18); border-color: rgba(255,93,122,.36); }
+.official-icon { width: 58px; height: 58px; border-radius: 18px; overflow: hidden; display: grid; place-items: center; background: #05070d; border: 1px solid var(--line); flex: 0 0 auto; }
+.official-icon img { width: 100%; height: 100%; object-fit: cover; }
+.server-dot img[src*="distopia-app-icon"], .welcome-mark img[src*="distopia-app-icon"] { object-fit: cover; padding: 0; }
+
+/* Distopia message ownership/edit fixes */
+html, body { height: 100%; overflow: hidden; }
+.app-shell { height: 100dvh; max-height: 100dvh; min-height: 0; }
+.rail, .side, .chat, .people { min-height: 0; }
+.chat { height: 100%; min-height: 0; overflow: hidden; grid-template-rows: 56px minmax(0, 1fr) auto; }
+.messages { min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.message-main { min-width: 0; position: relative; }
+.message:hover { background: rgba(255,255,255,.018); border-radius: 14px; }
+.message-actions { display: none; gap: 6px; margin-top: 6px; }
+.message:hover .message-actions, .message:focus-within .message-actions { display: flex; }
+.message-actions button { border: 1px solid var(--line); background: rgba(255,255,255,.035); color: var(--muted); border-radius: 10px; padding: 5px 8px; font-size: 11px; cursor: pointer; }
+.message-actions button:hover { color: var(--text); background: var(--panel-3); }
+.message-actions .danger-action { color: #ffb4c2; border-color: rgba(255,93,122,.28); }
+.message-actions .danger-action:hover { background: rgba(255,93,122,.13); }
+.message-edit-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 7px; margin-top: 5px; align-items: center; }
+.message-edit-input { padding: 8px 10px; border-radius: 12px; }
+.edited-tag { margin-left: 6px; border: 0; background: transparent; color: var(--dim); cursor: pointer; font-size: 11px; padding: 0; }
+.edited-tag:hover { color: var(--muted); text-decoration: underline; }
+.edit-history { display: grid; gap: 10px; }
+.history-entry { border: 1px solid var(--line); background: rgba(255,255,255,.025); border-radius: 14px; padding: 10px; display: grid; gap: 6px; }
+.history-label { color: var(--dim); font-size: 10px; text-transform: uppercase; letter-spacing: .09em; font-weight: 900; }
+.history-content { white-space: pre-wrap; overflow-wrap: anywhere; color: #d9def7; font-size: 13px; line-height: 1.45; }
+.attachment { max-width: min(460px, 100%); max-height: 320px; object-fit: contain; background: rgba(0,0,0,.18); }
+.attachment-box { max-width: 100%; overflow: hidden; }
+.zip-attachment { padding-right: 12px; max-width: min(460px, 100%); }
+.attachment-remove { display: none; }
+.server-dot { background: #05070d; }
+.server-dot img { object-fit: contain; padding: 4px; }
+.server-dot img[src*="distopia-app-icon"] { object-fit: contain; padding: 3px; }
+.font-select option { background: #090d16; color: var(--text); }
+@media (max-width: 640px) {
+  .message-edit-form { grid-template-columns: 1fr; }
+  .attachment { max-width: 100%; max-height: 240px; }
+}
