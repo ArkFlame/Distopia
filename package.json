@@ -1,0 +1,33 @@
+{
+  "name": "distopia",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:seed": "tsx scripts/seed.ts",
+    "run:linux": "bash scripts/run-linux.sh",
+    "prod:linux": "bash scripts/prod-linux.sh",
+    "install:pnpm": "pnpm install --frozen-lockfile=false",
+    "run:yarn": "bash scripts/run-linux-yarn.sh",
+    "prod:yarn": "bash scripts/prod-linux-yarn.sh"
+  },
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest"
+  },
+  "packageManager": "pnpm@10.12.1"
+}
