@@ -1,3 +1,5 @@
+<img width="1353" height="632" alt="image" src="https://github.com/user-attachments/assets/83f00705-d4a5-46cc-9fea-83c46373ed3d" />
+
 # Distopia
 
 Production-oriented Next.js community chat app for `https://distopia.arkflame.com`.
