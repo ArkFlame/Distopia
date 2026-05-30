@@ -14,7 +14,12 @@ export async function POST(request: Request) {
     if (!target) return fail('User not found', 404);
     if (target.id === user.id) return fail('Cannot add yourself');
     if (!target.allowFriendRequests) return fail('User does not allow friend requests', 403);
-    db.prepare('INSERT OR IGNORE INTO friends (id, requesterId, addresseeId, status, createdAt) VALUES (?, ?, ?, ?, ?)').run(id(), user.id, target.id, 'pending', nowIso());
+    const existing = db.prepare(`
+      SELECT id, status FROM friends
+      WHERE (requesterId = ? AND addresseeId = ?) OR (requesterId = ? AND addresseeId = ?)
+    `).get(user.id, target.id, target.id, user.id) as { id: string; status: string } | undefined;
+    if (existing) return ok({ requested: true, status: existing.status });
+    db.prepare('INSERT INTO friends (id, requesterId, addresseeId, status, createdAt) VALUES (?, ?, ?, ?, ?)').run(id(), user.id, target.id, 'pending', nowIso());
     return ok({ requested: true });
   } catch (error) {
     return fail(error instanceof Error ? error.message : 'Friend request failed');

@@ -35,6 +35,6 @@ export function boolInt(value: unknown): number {
 
 export function publicBaseUrl(headers: Headers): string {
   const proto = headers.get('x-forwarded-proto') || 'http';
-  const host = headers.get('host') || 'localhost:3000';
+  const host = headers.get('host') || 'localhost:3928';
   return `${proto}://${host}`;
 }

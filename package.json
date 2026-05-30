@@ -14,7 +14,9 @@
     "install:pnpm": "pnpm install --frozen-lockfile=false",
     "run:yarn": "bash scripts/run-linux-yarn.sh",
     "prod:yarn": "bash scripts/prod-linux-yarn.sh",
-    "test:static": "node scripts/static-check.mjs"
+    "test:static": "node scripts/static-check.mjs",
+    "dev:linux": "bash scripts/dev-linux.sh",
+    "dev:yarn": "bash scripts/dev-linux-yarn.sh"
   },
   "dependencies": {
     "next": "latest",

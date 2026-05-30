@@ -2,10 +2,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-if [ "${DISTOPIA_MODE:-production}" = "dev" ]; then
-  exec bash scripts/dev-linux-yarn.sh
-fi
-
 if ! command -v yarn >/dev/null 2>&1; then
   if command -v corepack >/dev/null 2>&1; then
     echo "[Distopia] yarn not found. Activating yarn through corepack..."
@@ -26,15 +22,19 @@ PORT="${DISTOPIA_PORT:-3928}"
 export NODE_OPTIONS="${NODE_OPTIONS:-} --experimental-sqlite"
 export NODE_NO_WARNINGS=1
 
+LAN_IPS="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | paste -sd, - || true)"
+DEFAULT_DEV_ORIGINS="localhost,127.0.0.1,0.0.0.0,distopia.arkflame.com"
+if [ -n "${LAN_IPS}" ]; then
+  DEFAULT_DEV_ORIGINS="${DEFAULT_DEV_ORIGINS},${LAN_IPS}"
+fi
+export DISTOPIA_DEV_ORIGINS="${DISTOPIA_DEV_ORIGINS:-${DEFAULT_DEV_ORIGINS}}"
+
 echo "[Distopia] Installing dependencies with yarn..."
 yarn install
 
 echo "[Distopia] Preparing local SQLite database schema..."
 yarn db:seed
 
-echo "[Distopia] Building production bundle..."
-yarn build
-
-echo "[Distopia] Starting PRODUCTION server at http://localhost:${PORT}"
-echo "[Distopia] No Next.js dev HMR websocket is used in this mode. Press Ctrl+C to stop."
-yarn start -H 0.0.0.0 -p "${PORT}"
+echo "[Distopia] Starting DEVELOPMENT server at http://localhost:${PORT}"
+echo "[Distopia] Allowed dev origins: ${DISTOPIA_DEV_ORIGINS}"
+yarn dev -H 0.0.0.0 -p "${PORT}"

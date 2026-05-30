@@ -3,6 +3,8 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { absoluteFromRoot, env } from './env';
 
+export const DISTOPIA_AI_USER_ID = 'distopia-ai';
+
 const dbPath = absoluteFromRoot(env.dbPath);
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
@@ -35,6 +37,8 @@ export function ensureSchema(): void {
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL UNIQUE,
+      email TEXT NOT NULL DEFAULT '',
+      emailVerified INTEGER NOT NULL DEFAULT 0,
       displayName TEXT NOT NULL,
       passwordHash TEXT NOT NULL,
       avatarUrl TEXT NOT NULL DEFAULT '',
@@ -146,6 +150,36 @@ export function ensureSchema(): void {
       createdAt TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS direct_conversations (
+      id TEXT PRIMARY KEY,
+      directKey TEXT NOT NULL UNIQUE,
+      kind TEXT NOT NULL DEFAULT 'user',
+      title TEXT NOT NULL DEFAULT '',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS direct_members (
+      conversationId TEXT NOT NULL REFERENCES direct_conversations(id) ON DELETE CASCADE,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'member',
+      joinedAt TEXT NOT NULL,
+      PRIMARY KEY(conversationId, userId)
+    );
+
+    CREATE TABLE IF NOT EXISTS direct_messages (
+      id TEXT PRIMARY KEY,
+      conversationId TEXT NOT NULL REFERENCES direct_conversations(id) ON DELETE CASCADE,
+      userId TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      content TEXT NOT NULL,
+      createdAt TEXT NOT NULL,
+      editedAt TEXT NOT NULL DEFAULT '',
+      deletedAt INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_direct_members_user ON direct_members(userId, conversationId);
+    CREATE INDEX IF NOT EXISTS idx_direct_messages_conversation_created ON direct_messages(conversationId, createdAt);
+
     CREATE TABLE IF NOT EXISTS moderation_events (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL DEFAULT '',
@@ -155,6 +189,7 @@ export function ensureSchema(): void {
       createdAt TEXT NOT NULL
     );
 
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email)) WHERE email <> '';
     CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(userId);
     CREATE INDEX IF NOT EXISTS idx_members_user ON server_members(userId);
     CREATE INDEX IF NOT EXISTS idx_channels_server ON channels(serverId);
@@ -171,8 +206,21 @@ function addColumnIfMissing(table: string, column: string, ddl: string): void {
 }
 
 ensureSchema();
+ensureSystemAiUser();
+addColumnIfMissing('users', 'email', "email TEXT NOT NULL DEFAULT ''");
+addColumnIfMissing('users', 'emailVerified', "emailVerified INTEGER NOT NULL DEFAULT 0");
+db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users(lower(email)) WHERE email <> ''");
 addColumnIfMissing('channels', 'description', "description TEXT NOT NULL DEFAULT ''");
 addColumnIfMissing('messages', 'attachmentName', "attachmentName TEXT NOT NULL DEFAULT ''");
 addColumnIfMissing('messages', 'attachmentMime', "attachmentMime TEXT NOT NULL DEFAULT ''");
 addColumnIfMissing('messages', 'attachmentSize', "attachmentSize INTEGER NOT NULL DEFAULT 0");
 addColumnIfMissing('messages', 'editedAt', "editedAt TEXT NOT NULL DEFAULT ''");
+addColumnIfMissing('direct_conversations', 'directKey', "directKey TEXT NOT NULL DEFAULT ''");
+
+function ensureSystemAiUser(): void {
+  const now = new Date().toISOString();
+  db.prepare(`
+    INSERT OR IGNORE INTO users (id, username, displayName, passwordHash, avatarUrl, bio, theme, nameColor, font, verified, allowFriendRequests, allowServerInvites, createdAt)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(DISTOPIA_AI_USER_ID, 'distopia_ai', 'Distopia AI', 'system-user-disabled', '/assets/brand/distopia-app-icon.webp', 'Personal AI assistant inside Distopia.', 'obsidian', '#58d5ff', 'Neon Pulse', 1, 0, 0, now);
+}

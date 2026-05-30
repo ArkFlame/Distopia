@@ -14,10 +14,16 @@ export async function POST(_request: Request, ctx: { params: Promise<{ code: str
     if (invite.userId === user.id) return fail('Cannot add yourself');
     const target = db.prepare('SELECT allowFriendRequests FROM users WHERE id = ?').get(invite.userId) as { allowFriendRequests: number } | undefined;
     if (!target?.allowFriendRequests) return fail('User does not allow friend requests', 403);
-    const a = user.id < invite.userId ? user.id : invite.userId;
-    const b = user.id < invite.userId ? invite.userId : user.id;
-    db.prepare('INSERT OR IGNORE INTO friends (id, requesterId, addresseeId, status, createdAt) VALUES (?, ?, ?, ?, ?)').run(id(), a, b, 'pending', nowIso());
-    return ok({ requested: true });
+    const existing = db.prepare(`
+      SELECT id FROM friends
+      WHERE (requesterId = ? AND addresseeId = ?) OR (requesterId = ? AND addresseeId = ?)
+    `).get(invite.userId, user.id, user.id, invite.userId) as { id: string } | undefined;
+    if (existing) {
+      db.prepare('UPDATE friends SET status = ? WHERE id = ?').run('accepted', existing.id);
+      return ok({ accepted: true });
+    }
+    db.prepare('INSERT INTO friends (id, requesterId, addresseeId, status, createdAt) VALUES (?, ?, ?, ?, ?)').run(id(), invite.userId, user.id, 'accepted', nowIso());
+    return ok({ accepted: true });
   } catch {
     return fail('Not authenticated', 401);
   }

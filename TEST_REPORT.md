@@ -1,87 +1,108 @@
-# Distopia Asset/CDN Upgrade Test Report
+# Distopia registration fix test report
 
-Date: 2026-05-29
+Date: 2026-05-30
 
-## Verified
-
-- `npm ci` completed successfully.
-- `npm run build` completed successfully on Next.js 16.2.6.
-- `npm run db:seed` completed successfully.
-- Production server booted with `NODE_OPTIONS=--experimental-sqlite npm start`.
-- Login API accepted `owner / owner12345`.
-- Bootstrap API returned Distopia Official, channels, messages, and member presence.
-- Screenshot capture completed after authenticated login.
-- Logo banner processed into transparent WebP/PNG wordmark and icon variants using Python/Pillow.
-- Supplied profile pictures converted to optimized 512x512 WebP premade avatars.
-- Profile modal premade-avatar selection verified visually.
-- Runtime CDN route `/cdn/[kind]/[name]` verified with a message image upload and HTTP 200 image response.
-- ArkFlame Studios credit link added below the chat composer.
-
-## UI changes verified visually
-
-- First-run `/app` home screen shows: Invite friends, Create server, Join server.
-- User is joined to Distopia Official by default through seed and registration flow.
-- Right sidebar shows active and inactive member groups.
-- Inactive users are dimmed and show offline status.
-- Server actions moved into a three-dot context menu.
-- Rate/upload status is no longer always visible; it appears only for errors, selected files, or low remaining rate budget.
-- Left channel sidebar and right member sidebar have collapse controls.
-- Default profile pictures use deterministic local WebP avatar variants derived from user IDs.
-- Local Distopia WebP logo, transparent icon variants, favicon, app icons, and SVG icons load from bundled assets.
-- Runtime message/profile uploads are saved under `data/cdn` and served by the app CDN route.
-
-## Notes
-
-- Browser screenshot required temporarily removing the container Chromium URL block policy, then restoring it after capture.
-- No runtime CDN dependency remains. Static image/icon assets are bundled locally.
-- Chromium/SQLite warnings are environment/API warnings, not build failures.
-
-
-## 2026-05-30 patch validation
-
-Passed in sandbox:
+## Checks run in sandbox
 
 ```bash
 node scripts/static-check.mjs
 ```
 
-Validated statically:
+Result:
 
-- New server icon upload endpoint exists.
-- New channel edit endpoint exists.
-- New message attachment delete endpoint exists.
-- SQLite schema includes channel descriptions and attachment metadata columns.
-- Upload library supports images, ZIP files, server-icons CDN bucket, and 8 MB ZIP/image limits.
-- Client includes optimistic message send, attachment chip delete, sent attachment delete, channel/server settings, and compact app icon usage.
-- Generated WebP/PNG/ICO app assets exist.
+```txt
+Static production check passed.
+```
 
-Not executed in sandbox:
+```bash
+bash -n scripts/run-linux.sh
+bash -n scripts/prod-linux.sh
+bash -n scripts/run-linux-yarn.sh
+bash -n scripts/prod-linux-yarn.sh
+```
+
+Result:
+
+```txt
+shell-ok
+```
+
+TypeScript syntax transpile check was run through the globally installed TypeScript compiler API against all `app`, `components`, `lib`, and `scripts` TypeScript/TSX files.
+
+Result:
+
+```txt
+TypeScript transpile syntax check passed.
+```
+
+## Not run in sandbox
 
 ```bash
 pnpm install
 pnpm run build
 ```
 
-Reason: sandbox DNS resolution to `registry.npmjs.org` failed while Corepack tried to download pnpm. The scripts remain pnpm-first and include Yarn fallback.
+Reason: package registry DNS/network access is unavailable in the execution sandbox. The project remains pnpm-first and includes Yarn fallback scripts.
 
-## Message ownership, scroll, and font patch
+## Production changes verified statically
 
-Static validation performed with:
+- No demo `owner` / `nova` users in seed.
+- No `Distopia Official` default server in seed.
+- Registration no longer auto-joins a default server.
+- `DISTOPIA_PORT=3928` present in `.env.example`.
+- `DISTOPIA_APP_URL=https://distopia.arkflame.com` present in `.env.example`.
+- `OPENROUTER_API_KEY` and `DISTOPIA_AI_MODEL=openrouter/free` present in `.env.example`.
+- Direct conversation API routes exist.
+- Direct message API route exists.
+- Distopia AI system user exists in schema.
+- Pen/trash SVG icons exist.
+- Home sidebars changed to Recent Conversations and Online Friends.
+
+
+## Registration fix checks
 
 ```bash
-node scripts/static-check.mjs
+tsc lib/email.ts --noEmit --target ES2022 --module ESNext --strict
 ```
 
-Covered by static checks and source inspection:
+Result:
 
-- Message text is now required. Attachment-only sends are rejected client-side and server-side.
-- Sent attachment cards no longer expose attachment delete controls. Only the input attachment chip has an X button.
-- Server owners can delete messages from the hover action bar.
-- Authors can edit their own messages from the hover action bar.
-- Edited messages show `(edited)` after the message content.
-- Edit history is stored in `message_edits` and exposed through `/api/messages/:messageId/history`.
-- Chat layout is fixed to viewport height using `100dvh`, `minmax(0, 1fr)`, and a dedicated `.messages` scroll container.
-- Server icons now use `object-fit: contain` inside left rail bubbles to avoid side cropping.
-- Profile font dropdown now includes additional stylized options including Neon Pulse, Cyber Grid, Arcade, Terminal, Elegant Serif, Street Bold, and Rounded Soft.
+```txt
+passed
+```
 
-Build not run in this sandbox because package install still requires registry access and the environment cannot resolve `registry.npmjs.org`.
+```bash
+tsc lib/email.ts --target ES2022 --module NodeNext --moduleResolution NodeNext --outDir /tmp/distopia-email-test --strict
+node email-validation-smoke-test
+```
+
+Result:
+
+```txt
+Email validation smoke test passed.
+```
+
+Verified statically:
+
+- Register form has required email input.
+- Register form catches network/non-JSON failures and shows visible errors.
+- Successful auth uses `window.location.assign('/app')` to avoid silent router failure.
+- Register API validates email with `normalizePopularEmail`.
+- Login API accepts username or email.
+- User schema has `email`, `emailVerified`, and unique lower-email index.
+
+
+## Registration/session fix
+
+- Registration form now validates email, username, display name, and password before sending.
+- Auth requests use same-origin credentials and no-store cache.
+- Successful auth verifies `/api/me` before redirecting.
+- Session cookies use automatic secure-cookie detection to avoid LAN/HTTP local testing failures.
+- Static check verifies auth page, email helper, and cookie-secure logic tokens.
+
+
+## HMR/Register fix 2026-05-30
+
+`./scripts/run-linux.sh` and `./scripts/run-linux-yarn.sh` now run production mode by default. They build and start with `next start`, so the browser never requests `/_next/webpack-hmr`. For explicit dev mode, use `./scripts/dev-linux.sh` or set `DISTOPIA_MODE=dev`.
+
+`next.config.ts` uses `allowedDevOrigins` from `DISTOPIA_DEV_ORIGINS` for LAN dev testing.

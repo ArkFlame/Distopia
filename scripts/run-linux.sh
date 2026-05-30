@@ -3,11 +3,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 source scripts/package-manager.sh
 
+if [ "${DISTOPIA_MODE:-production}" = "dev" ]; then
+  exec bash scripts/dev-linux.sh
+fi
+
 if [ ! -f .env ]; then
   cp .env.example .env
 fi
 
 mkdir -p data data/cdn public/uploads
+PORT="${DISTOPIA_PORT:-3928}"
 export NODE_OPTIONS="${NODE_OPTIONS:-} --experimental-sqlite"
 export NODE_NO_WARNINGS=1
 
@@ -19,9 +24,12 @@ else
   echo "[Distopia] To reinstall cleanly: rm -rf node_modules pnpm-lock.yaml && ./scripts/run-linux.sh"
 fi
 
-echo "[Distopia] Seeding local SQLite database..."
+echo "[Distopia] Preparing local SQLite database schema..."
 run_pnpm db:seed
 
-echo "[Distopia] Starting development server at http://localhost:3000"
-echo "[Distopia] This process stays open while the server runs. Press Ctrl+C to stop."
-run_pnpm dev
+echo "[Distopia] Building production bundle..."
+run_pnpm build
+
+echo "[Distopia] Starting PRODUCTION server at http://localhost:${PORT}"
+echo "[Distopia] No Next.js dev HMR websocket is used in this mode. Press Ctrl+C to stop."
+run_pnpm start -H 0.0.0.0 -p "${PORT}"

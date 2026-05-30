@@ -7,7 +7,7 @@ import { isPremadeAvatarUrl } from '@/lib/avatar';
 export const runtime = 'nodejs';
 
 const allowedThemes = new Set(['obsidian', 'neon', 'ember', 'forest', 'mono', 'aurora']);
-const allowedFonts = new Set(['Inter', 'JetBrains Mono', 'Georgia', 'Trebuchet MS']);
+const allowedFonts = new Set(['Inter', 'JetBrains Mono', 'Neon Pulse', 'Cyber Grid', 'Arcade', 'Terminal', 'Elegant Serif', 'Street Bold', 'Rounded Soft', 'Georgia', 'Trebuchet MS', 'Verdana', 'Courier New', 'Impact', 'Comic Sans MS', 'Brush Script MT', 'Times New Roman']);
 
 export async function GET() {
   try {

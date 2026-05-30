@@ -18,18 +18,19 @@ if [ ! -f .env ]; then
 fi
 
 mkdir -p data data/cdn public/uploads
+PORT="${DISTOPIA_PORT:-3928}"
 export NODE_OPTIONS="${NODE_OPTIONS:-} --experimental-sqlite"
 export NODE_NO_WARNINGS=1
 
 echo "[Distopia] Installing dependencies with yarn..."
 yarn install
 
-echo "[Distopia] Seeding local SQLite database..."
+echo "[Distopia] Preparing local SQLite database schema..."
 yarn db:seed
 
 echo "[Distopia] Building production bundle..."
 yarn build
 
-echo "[Distopia] Starting production server at http://localhost:3000"
+echo "[Distopia] Starting production server at http://localhost:${PORT}"
 echo "[Distopia] This process stays open while the server runs. Press Ctrl+C to stop."
-yarn start
+yarn start -H 0.0.0.0 -p "${PORT}"

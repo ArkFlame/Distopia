@@ -1,50 +1,37 @@
 'use client';
 
-import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CSSProperties, FormEvent, MouseEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 type User = { id: string; username: string; displayName: string; avatarUrl: string; bio: string; theme: string; nameColor: string; font: string; verified: boolean; allowFriendRequests: boolean; allowServerInvites: boolean; };
 type Server = { id: string; name: string; description: string; iconUrl: string; publicJoin: number; vanityCode: string; theme: string; role: string; };
 type Channel = { id: string; serverId: string; name: string; description: string; type: string; position: number; };
-type Member = { id: string; username: string; displayName: string; avatarUrl: string; nameColor: string; font: string; role: string; nickname: string; online?: boolean | number; };
+type Member = { serverId: string; id: string; username: string; displayName: string; avatarUrl: string; nameColor: string; font: string; role: string; nickname: string; online?: boolean | number; };
 type Message = { id: string; channelId: string; content: string; attachmentUrl: string; attachmentName: string; attachmentMime: string; attachmentSize: number; createdAt: string; editedAt: string; editHistoryCount: number; userId: string; username: string; displayName: string; avatarUrl: string; nameColor: string; font: string; localStatus?: 'sending' | 'failed'; localError?: string; };
-type Friend = { id: string; status: string; otherId: string; username: string; displayName: string; avatarUrl: string; nameColor: string; font: string; direction: string; };
+type Friend = { id: string; status: string; otherId: string; username: string; displayName: string; avatarUrl: string; nameColor: string; font: string; direction: string; online?: boolean | number; };
+type DirectConversation = { id: string; kind: string; title: string; updatedAt: string; otherId: string; username: string; displayName: string; avatarUrl: string; nameColor: string; font: string; online?: boolean | number; lastMessage: string; lastMessageAt: string; };
+type DirectMessage = { id: string; conversationId: string; content: string; createdAt: string; editedAt: string; userId: string; username: string; displayName: string; avatarUrl: string; nameColor: string; font: string; localStatus?: 'sending' | 'failed'; localError?: string; };
 type Rate = { bucket: string; limit: number; remaining: number; resetAt: number; retryAfterMs: number; };
-type Bootstrap = { user: User; servers: Server[]; channels: Channel[]; members: Member[]; messages: Message[]; friends: Friend[]; webhooks: unknown[]; invites: unknown[]; appUrl: string; };
+type Bootstrap = { user: User; servers: Server[]; channels: Channel[]; members: Member[]; messages: Message[]; friends: Friend[]; directConversations: DirectConversation[]; directMessages: DirectMessage[]; webhooks: unknown[]; invites: unknown[]; appUrl: string; };
 type EditHistory = { id: string; previousContent: string; newContent: string; createdAt: string; userId: string; username: string; displayName: string; };
 type AttachmentDraft = { file: File; previewUrl: string; name: string; mime: string; size: number; kind: 'image' | 'zip' };
+type ProfileLike = { id: string; displayName: string; avatarUrl: string; nameColor: string; font: string; username?: string; online?: boolean | number; };
 
 type Modal = 'server' | 'serverSettings' | 'channel' | 'channelSettings' | 'invite' | 'profile' | 'webhook' | 'friends' | 'join' | null;
-type View = 'home' | 'server';
+type View = 'home' | 'server' | 'dm';
 
+const AI_USER_ID = 'distopia-ai';
 const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 const IMAGE_ACCEPT = 'image/png,image/jpeg,image/gif,image/webp';
 const ATTACHMENT_ACCEPT = `${IMAGE_ACCEPT},application/zip,.zip`;
-const FONT_OPTIONS = [
-  'Inter',
-  'JetBrains Mono',
-  'Neon Pulse',
-  'Cyber Grid',
-  'Arcade',
-  'Terminal',
-  'Elegant Serif',
-  'Street Bold',
-  'Rounded Soft',
-  'Georgia',
-  'Trebuchet MS',
-  'Verdana',
-  'Courier New',
-  'Impact',
-  'Comic Sans MS',
-  'Brush Script MT',
-  'Times New Roman'
-];
+const FONT_OPTIONS = ['Inter', 'JetBrains Mono', 'Neon Pulse', 'Cyber Grid', 'Arcade', 'Terminal', 'Elegant Serif', 'Street Bold', 'Rounded Soft', 'Georgia', 'Trebuchet MS', 'Verdana', 'Courier New', 'Impact', 'Comic Sans MS', 'Brush Script MT', 'Times New Roman'];
 
 export default function AppClient() {
   const router = useRouter();
   const [data, setData] = useState<Bootstrap | null>(null);
   const [selectedServerId, setSelectedServerId] = useState('');
   const [selectedChannelId, setSelectedChannelId] = useState('');
+  const [selectedDirectId, setSelectedDirectId] = useState('');
   const [view, setView] = useState<View>('home');
   const [modal, setModal] = useState<Modal>(null);
   const [error, setError] = useState('');
@@ -54,13 +41,24 @@ export default function AppClient() {
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyMessage, setHistoryMessage] = useState<{ message: Message; entries: EditHistory[] } | null>(null);
+  const [profileMenu, setProfileMenu] = useState<{ x: number; y: number; user: ProfileLike } | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const selectedServer = useMemo(() => data?.servers.find((s) => s.id === selectedServerId) || data?.servers[0], [data, selectedServerId]);
-  const officialServer = useMemo(() => data?.servers.find((s) => s.vanityCode === 'distopia') || data?.servers[0], [data]);
+  const selectedServer = useMemo(() => data?.servers.find((s) => s.id === selectedServerId), [data, selectedServerId]);
+  const selectedDirect = useMemo(() => data?.directConversations.find((c) => c.id === selectedDirectId), [data, selectedDirectId]);
   const channels = useMemo(() => data?.channels.filter((c) => c.serverId === selectedServer?.id) || [], [data, selectedServer]);
   const selectedChannel = useMemo(() => channels.find((c) => c.id === selectedChannelId) || channels[0], [channels, selectedChannelId]);
+  const members = useMemo(() => data?.members.filter((m) => m.serverId === selectedServer?.id) || [], [data, selectedServer]);
+  const activeMembers = members.filter((member) => Boolean(member.online));
+  const inactiveMembers = members.filter((member) => !Boolean(member.online));
+  const messages = data?.messages.filter((m) => m.channelId === selectedChannel?.id) || [];
+  const directMessages = data?.directMessages.filter((m) => m.conversationId === selectedDirect?.id) || [];
+  const acceptedFriends = data?.friends.filter((friend) => friend.status === 'accepted') || [];
+  const onlineFriends = acceptedFriends.filter((friend) => Boolean(friend.online));
+  const aiConversation = data?.directConversations.find((conversation) => conversation.otherId === AI_USER_ID);
   const theme = data?.user.theme || 'obsidian';
+  const appUrl = data?.appUrl || 'https://distopia.arkflame.com';
+  const statusText = error || (rate ? formatRate(rate) : '');
 
   const load = useCallback(async () => {
     const response = await fetch('/api/bootstrap', { cache: 'no-store' });
@@ -72,16 +70,16 @@ export default function AppClient() {
     const boot = normalizeBootstrap(json.data as Bootstrap);
     setData((previous) => {
       if (!previous) return boot;
-      const local = previous.messages.filter((message) => message.localStatus);
-      return { ...boot, messages: mergeMessages(boot.messages, local) };
+      const localMessages = previous.messages.filter((message) => message.localStatus);
+      const localDirect = previous.directMessages.filter((message) => message.localStatus);
+      return { ...boot, messages: mergeMessages(boot.messages, localMessages), directMessages: mergeDirectMessages(boot.directMessages, localDirect) };
     });
-    const preferred = boot.servers.find((s) => s.vanityCode === 'distopia') || boot.servers[0];
-    setSelectedServerId((current) => current || preferred?.id || '');
-    const preferredChannel = boot.channels.find((c) => c.serverId === preferred?.id);
-    setSelectedChannelId((current) => current || preferredChannel?.id || boot.channels[0]?.id || '');
+    setSelectedServerId((current) => current && boot.servers.some((server) => server.id === current) ? current : '');
+    setSelectedChannelId((current) => current && boot.channels.some((channel) => channel.id === current) ? current : '');
+    setSelectedDirectId((current) => current && boot.directConversations.some((conversation) => conversation.id === current) ? current : '');
   }, [router]);
 
-  const loadMessages = useCallback(async () => {
+  const loadServerMessages = useCallback(async () => {
     if (view !== 'server' || !selectedChannel?.id) return;
     const response = await fetch(`/api/channels/${selectedChannel.id}/messages`, { cache: 'no-store' });
     const json = await response.json();
@@ -90,13 +88,25 @@ export default function AppClient() {
     setData((previous) => previous ? { ...previous, messages: mergeMessages(remote, previous.messages.filter((message) => message.localStatus && message.channelId === selectedChannel.id)) } : previous);
   }, [selectedChannel?.id, view]);
 
+  const loadDirectMessages = useCallback(async () => {
+    if (view !== 'dm' || !selectedDirect?.id) return;
+    const response = await fetch(`/api/direct-conversations/${selectedDirect.id}/messages`, { cache: 'no-store' });
+    const json = await response.json();
+    if (!json.ok) return;
+    const remote = normalizeDirectMessages(json.data.messages as DirectMessage[]);
+    setData((previous) => previous ? { ...previous, directMessages: mergeDirectMessages(remote, previous.directMessages.filter((message) => message.localStatus && message.conversationId === selectedDirect.id)) } : previous);
+  }, [selectedDirect?.id, view]);
+
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => { setSelectedChannelId((current) => channels.some((channel) => channel.id === current) ? current : channels[0]?.id || ''); }, [channels]);
   useEffect(() => {
-    const first = channels[0]?.id || '';
-    setSelectedChannelId((current) => channels.some((channel) => channel.id === current) ? current : first);
-  }, [channels]);
-  useEffect(() => { void loadMessages(); const timer = setInterval(() => void loadMessages(), 1800); return () => clearInterval(timer); }, [loadMessages]);
-  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [data?.messages.length, selectedChannelId, view]);
+    void loadServerMessages();
+    void loadDirectMessages();
+    const timer = setInterval(() => { void loadServerMessages(); void loadDirectMessages(); }, 1800);
+    return () => clearInterval(timer);
+  }, [loadServerMessages, loadDirectMessages]);
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [data?.messages.length, data?.directMessages.length, selectedChannelId, selectedDirectId, view]);
+  useEffect(() => { const close = () => setProfileMenu(null); window.addEventListener('click', close); return () => window.removeEventListener('click', close); }, []);
 
   async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -105,25 +115,28 @@ export default function AppClient() {
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedChannel || !data) return;
+    if (!data) return;
     setError('');
     const formElement = event.currentTarget;
     const contentInput = formElement.elements.namedItem('content') as HTMLInputElement;
-    const fileInput = formElement.elements.namedItem('attachment') as HTMLInputElement;
+    const fileInput = formElement.elements.namedItem('attachment') as HTMLInputElement | null;
     const content = contentInput.value.trim();
-    const draft = attachment;
     if (!content) {
-      setError(draft ? 'Write a message before attaching files' : 'Message required');
+      setError(attachment ? 'Write a message before attaching files' : 'Message required');
       return;
     }
-
+    if (view === 'dm') {
+      await sendDirectMessage(content, contentInput);
+      return;
+    }
+    if (!selectedChannel) return;
+    const draft = attachment;
     const tempId = `local-${Date.now()}`;
-    const previewUrl = draft?.previewUrl || '';
     const optimistic: Message = {
       id: tempId,
       channelId: selectedChannel.id,
       content,
-      attachmentUrl: previewUrl,
+      attachmentUrl: draft?.previewUrl || '',
       attachmentName: draft?.name || '',
       attachmentMime: draft?.mime || '',
       attachmentSize: draft?.size || 0,
@@ -140,7 +153,7 @@ export default function AppClient() {
     };
     setData((previous) => previous ? { ...previous, messages: [...previous.messages, optimistic] } : previous);
     contentInput.value = '';
-    fileInput.value = '';
+    if (fileInput) fileInput.value = '';
     setAttachment(null);
 
     const request = new FormData();
@@ -156,6 +169,45 @@ export default function AppClient() {
     }
     const remote = normalizeMessage(json.data.message as Message);
     setData((previous) => previous ? { ...previous, messages: previous.messages.map((message) => message.id === tempId ? remote : message) } : previous);
+  }
+
+  async function sendDirectMessage(content: string, input: HTMLInputElement) {
+    if (!data || !selectedDirect) return;
+    const tempId = `local-dm-${Date.now()}`;
+    const optimistic: DirectMessage = {
+      id: tempId,
+      conversationId: selectedDirect.id,
+      content,
+      createdAt: new Date().toISOString(),
+      editedAt: '',
+      userId: data.user.id,
+      username: data.user.username,
+      displayName: data.user.displayName,
+      avatarUrl: data.user.avatarUrl,
+      nameColor: data.user.nameColor,
+      font: data.user.font,
+      localStatus: 'sending'
+    };
+    setData((previous) => previous ? { ...previous, directMessages: [...previous.directMessages, optimistic] } : previous);
+    input.value = '';
+    const response = await fetch(`/api/direct-conversations/${selectedDirect.id}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
+    const json = await response.json();
+    setRate(shouldExposeRate(json.rate) ? json.rate : null);
+    if (!json.ok) {
+      setData((previous) => previous ? { ...previous, directMessages: previous.directMessages.map((message) => message.id === tempId ? { ...message, localStatus: 'failed', localError: json.error || 'Message failed' } : message) } : previous);
+      setError(json.error || 'Message failed');
+      return;
+    }
+    const remote = normalizeDirectMessages(json.data.messages as DirectMessage[]);
+    setData((previous) => previous ? { ...previous, directMessages: mergeDirectMessages(remote, previous.directMessages.filter((message) => message.localStatus && message.id !== tempId)) } : previous);
+    if (json.data.aiError) setError(json.data.aiError);
+    await refreshConversationsOnly();
+  }
+
+  async function refreshConversationsOnly() {
+    const response = await fetch('/api/direct-conversations', { cache: 'no-store' });
+    const json = await response.json();
+    if (json.ok) setData((previous) => previous ? { ...previous, directConversations: normalizeDirectConversations(json.data.conversations as DirectConversation[]) } : previous);
   }
 
   async function simplePost(url: string, body: Record<string, unknown>, after?: () => void) {
@@ -185,15 +237,30 @@ export default function AppClient() {
     return json.data;
   }
 
+  async function openDirectConversation(peerId: string) {
+    if (peerId === data?.user.id) return;
+    const result = await simplePost('/api/direct-conversations', { peerId });
+    const conversationId = (result as { conversationId?: string } | null)?.conversationId;
+    if (conversationId) {
+      setSelectedDirectId(conversationId);
+      setView('dm');
+      setLeftCollapsed(false);
+      setRightCollapsed(false);
+      setProfileMenu(null);
+    }
+  }
+
   async function createServer(form: FormData) {
     const name = String(form.get('name') || '');
     const description = String(form.get('description') || '');
     const created = await simplePost('/api/servers', { name, description });
-    const serverId = (created as { serverId?: string } | null)?.serverId;
+    const serverId = (created as { serverId?: string; channelId?: string } | null)?.serverId;
+    const channelId = (created as { channelId?: string } | null)?.channelId;
     const icon = form.get('icon') as File | null;
     if (serverId && icon && icon.size > 0 && !(await uploadServerIcon(serverId, icon))) return;
     if (serverId) {
       setSelectedServerId(serverId);
+      if (channelId) setSelectedChannelId(channelId);
       setView('server');
     }
     setModal(null);
@@ -233,16 +300,6 @@ export default function AppClient() {
     }
   }
 
-  async function deleteAttachment(messageId: string) {
-    const response = await fetch(`/api/messages/${messageId}/attachment`, { method: 'DELETE' });
-    const json = await response.json();
-    if (!json.ok) {
-      setError(json.error || 'Attachment delete failed');
-      return;
-    }
-    setData((previous) => previous ? { ...previous, messages: previous.messages.map((message) => message.id === messageId ? { ...message, attachmentUrl: '', attachmentName: '', attachmentMime: '', attachmentSize: 0 } : message) } : previous);
-  }
-
   async function editMessage(messageId: string, content: string): Promise<boolean> {
     setError('');
     const response = await fetch(`/api/messages/${messageId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
@@ -280,7 +337,15 @@ export default function AppClient() {
 
   function openServer(server: Server) {
     setSelectedServerId(server.id);
+    const first = data?.channels.find((channel) => channel.serverId === server.id)?.id || '';
+    if (first) setSelectedChannelId(first);
     setView('server');
+    setMenuOpen(false);
+  }
+
+  function openConversation(conversation: DirectConversation) {
+    setSelectedDirectId(conversation.id);
+    setView('dm');
     setMenuOpen(false);
   }
 
@@ -314,17 +379,10 @@ export default function AppClient() {
 
   if (!data) return <main className="shell-bg empty">Loading Distopia...</main>;
 
-  const messages = data.messages.filter((m) => m.channelId === selectedChannel?.id);
-  const members = data.members;
-  const activeMembers = members.filter((member) => Boolean(member.online));
-  const inactiveMembers = members.filter((member) => !Boolean(member.online));
-  const appUrl = data.appUrl;
-  const statusText = error || (rate ? formatRate(rate) : '');
-
   return (
     <main className={`app-shell theme-${theme} ${leftCollapsed ? 'left-collapsed' : ''} ${rightCollapsed ? 'right-collapsed' : ''}`}>
       <aside className="rail" aria-label="Server rail">
-        <button className={`server-dot ${view === 'home' ? 'active' : ''}`} title="Home" onClick={() => setView('home')}>
+        <button className={`server-dot ${view === 'home' || view === 'dm' ? 'active' : ''}`} title="Home" onClick={() => setView('home')}>
           <img src="/assets/brand/distopia-app-icon.webp" alt="" />
         </button>
         {data.servers.map((server) => (
@@ -335,63 +393,75 @@ export default function AppClient() {
         <button className="icon-btn" title="Create server" onClick={() => openModal('server')}><Icon name="server-plus" /></button>
       </aside>
 
-      <aside className="side" aria-label="Channels">
-        <div className="side-head">
-          <div className="side-title">
-            <span>{selectedServer?.name || 'No server'}</span>
-            <div className="menu-anchor">
-              <button className="mini-icon" title="Server options" onClick={() => setMenuOpen((open) => !open)}><Icon name="dots" /></button>
-              {menuOpen && <ActionMenu open={openModal} canUseServer={Boolean(selectedServer)} />}
+      <aside className="side" aria-label={view === 'server' ? 'Channels' : 'Recent conversations'}>
+        {view === 'server' ? (
+          <>
+            <div className="side-head">
+              <div className="side-title">
+                <span>{selectedServer?.name || 'No server'}</span>
+                <div className="menu-anchor">
+                  <button className="mini-icon" title="Server options" onClick={() => setMenuOpen((open) => !open)}><Icon name="dots" /></button>
+                  {menuOpen && <ActionMenu open={openModal} canUseServer={Boolean(selectedServer)} />}
+                </div>
+              </div>
+              <div className="server-desc">{selectedServer?.description || 'No server description.'}</div>
             </div>
-          </div>
-          <div className="server-desc">{selectedServer?.description || 'Create or join a server to start.'}</div>
-        </div>
-        <div className="channel-list">
-          {channels.map((channel) => (
-            <button className={`channel ${view === 'server' && channel.id === selectedChannel?.id ? 'active' : ''}`} key={channel.id} onClick={() => { setSelectedChannelId(channel.id); setView('server'); }}>
-              <Icon name="hash" /> <span>{channel.name}</span>
-            </button>
-          ))}
-          {!channels.length && <div className="empty">No channels.</div>}
-        </div>
+            <div className="channel-list">
+              {channels.map((channel) => (
+                <button className={`channel ${channel.id === selectedChannel?.id ? 'active' : ''}`} key={channel.id} onClick={() => { setSelectedChannelId(channel.id); setView('server'); }}>
+                  <Icon name="hash" /> <span>{channel.name}</span>
+                </button>
+              ))}
+              {!channels.length && <div className="empty">No channels.</div>}
+            </div>
+          </>
+        ) : (
+          <RecentConversations conversations={data.directConversations} selectedId={selectedDirectId} openConversation={openConversation} openModal={openModal} />
+        )}
       </aside>
 
       <section className="chat">
         <header className="chat-head">
-          <button className="mini-icon hide-mobile" title={leftCollapsed ? 'Open channels' : 'Collapse channels'} onClick={() => setLeftCollapsed((collapsed) => !collapsed)}>
+          <button className="mini-icon hide-mobile" title={leftCollapsed ? 'Open left panel' : 'Collapse left panel'} onClick={() => setLeftCollapsed((collapsed) => !collapsed)}>
             <Icon name={leftCollapsed ? 'chevron-right' : 'chevron-left'} />
           </button>
           <div className="chat-head-copy">
-            <div className="chat-title">{view === 'home' ? 'Start' : `# ${selectedChannel?.name || 'empty'}`}</div>
-            <div className="chat-sub">{view === 'home' ? 'Invite friends, create server, or join server.' : selectedChannel?.description || ''}</div>
+            <div className="chat-title">{view === 'home' ? 'Start' : view === 'dm' ? selectedDirect?.displayName || 'Conversation' : `# ${selectedChannel?.name || 'empty'}`}</div>
+            <div className="chat-sub">{view === 'home' ? 'Invite friends, create server, or join server.' : view === 'dm' ? selectedDirect?.lastMessage || 'Private conversation.' : selectedChannel?.description || ''}</div>
           </div>
           <div className="head-actions">
             <button className="mini-icon" title="Profile" onClick={() => openModal('profile')}><Avatar user={data.user} small /></button>
-            <button className="mini-icon hide-mobile" title={rightCollapsed ? 'Open members' : 'Collapse members'} onClick={() => setRightCollapsed((collapsed) => !collapsed)}>
+            <button className="mini-icon hide-mobile" title={rightCollapsed ? 'Open right panel' : 'Collapse right panel'} onClick={() => setRightCollapsed((collapsed) => !collapsed)}>
               <Icon name={rightCollapsed ? 'chevron-left' : 'chevron-right'} />
             </button>
           </div>
         </header>
 
         {view === 'home' ? (
-          <HomeStage user={data.user} officialServer={officialServer} openServer={openServer} openModal={openModal} appUrl={appUrl} />
+          <HomeStage user={data.user} openModal={openModal} openAi={() => aiConversation && openConversation(aiConversation)} />
+        ) : view === 'dm' ? (
+          <>
+            <div className="messages" ref={scrollRef}>
+              {directMessages.map((message) => <DirectMessageRow key={message.id} message={message} />)}
+              {!directMessages.length && <div className="empty">No private messages yet.</div>}
+            </div>
+            <form className="composer-wrap" onSubmit={sendMessage}>
+              {statusText && <div className={`status-bar ${error ? 'error-state' : ''}`}>{statusText}</div>}
+              <div className="composer dm-composer">
+                <input className="input composer-input" name="content" maxLength={4000} placeholder={`Message ${selectedDirect?.displayName || 'conversation'}`} autoComplete="off" />
+                <button className="send-btn" type="submit" title="Send"><Icon name="send" /></button>
+              </div>
+              <a className="arkflame-credit" href="https://arkflame.com" target="_blank" rel="noreferrer">Made with love by ArkFlame Studios</a>
+            </form>
+          </>
         ) : (
           <>
             <div className="messages" ref={scrollRef}>
               {messages.map((message) => (
-                <MessageRow
-                  key={message.id}
-                  message={message}
-                  currentUserId={data.user.id}
-                  canDelete={selectedServer?.role === 'owner'}
-                  onEdit={editMessage}
-                  onDelete={deleteMessage}
-                  onHistory={showEditHistory}
-                />
+                <MessageRow key={message.id} message={message} currentUserId={data.user.id} canDelete={selectedServer?.role === 'owner'} onEdit={editMessage} onDelete={deleteMessage} onHistory={showEditHistory} />
               ))}
               {!messages.length && <div className="empty">No messages yet.</div>}
             </div>
-
             <form className="composer-wrap" onSubmit={sendMessage}>
               {statusText && <div className={`status-bar ${error ? 'error-state' : ''}`}>{statusText}</div>}
               {attachment && <AttachmentChip attachment={attachment} remove={() => { if (attachment.previewUrl) URL.revokeObjectURL(attachment.previewUrl); setAttachment(null); }} />}
@@ -406,36 +476,15 @@ export default function AppClient() {
         )}
       </section>
 
-      <aside className="people" aria-label="Members">
-        <div className="panel-scroll">
-          <div className="card identity-card">
-            <h3>Identity</h3>
-            <div className="member self-card">
-              <Avatar user={data.user} />
-              <div>
-                <div className="member-name" style={nameStyle(data.user.font, data.user.nameColor)}>{data.user.displayName}</div>
-                <div className="member-role"><span className="presence-dot online" /> @{data.user.username}</div>
-              </div>
-            </div>
-            <div className="mini-grid"><button className="secondary" onClick={() => openModal('profile')}>Edit</button><button className="danger" onClick={logout}>Exit</button></div>
-          </div>
-          <div className="card members-card">
-            <h3>Active</h3>
-            {activeMembers.map((member) => <MemberRow key={member.id} member={member} />)}
-            {!activeMembers.length && <div className="empty compact">No active members.</div>}
-          </div>
-          <div className="card members-card">
-            <h3>Inactive</h3>
-            {inactiveMembers.map((member) => <MemberRow key={member.id} member={member} inactive />)}
-            {!inactiveMembers.length && <div className="empty compact">No inactive members.</div>}
-          </div>
-          <div className="card">
-            <h3>Public embed</h3>
-            <div className="copy-box">{selectedServer ? `${appUrl}/embed/server/${selectedServer.id}` : 'No server'}</div>
-          </div>
-        </div>
+      <aside className="people" aria-label={view === 'server' ? 'Members' : 'Online friends'}>
+        {view === 'server' ? (
+          <ServerPeoplePanel user={data.user} selectedServer={selectedServer} appUrl={appUrl} activeMembers={activeMembers} inactiveMembers={inactiveMembers} openProfile={() => openModal('profile')} logout={logout} onMemberContext={(event, member) => openProfileMenu(event, member, setProfileMenu, data.user.id)} />
+        ) : (
+          <HomePeoplePanel user={data.user} aiConversation={aiConversation} onlineFriends={onlineFriends} openProfile={() => openModal('profile')} logout={logout} openConversation={openConversation} onFriendContext={(event, friend) => openProfileMenu(event, friendToProfile(friend), setProfileMenu, data.user.id)} />
+        )}
       </aside>
 
+      {profileMenu && <ProfileContextMenu menu={profileMenu} close={() => setProfileMenu(null)} openDirect={openDirectConversation} />}
       {modal === 'server' && <Modal title="Create server" close={() => setModal(null)}><ServerForm submit={createServer} /></Modal>}
       {modal === 'serverSettings' && selectedServer && <Modal title="Server settings" close={() => setModal(null)}><ServerSettingsForm server={selectedServer} submit={saveServerSettings} /></Modal>}
       {modal === 'channel' && <Modal title="Create channel" close={() => setModal(null)}><ChannelForm submit={(body) => selectedServer && simplePost(`/api/servers/${selectedServer.id}/channels`, body, () => setModal(null))} /></Modal>}
@@ -444,10 +493,32 @@ export default function AppClient() {
       {modal === 'join' && <Modal title="Join server" close={() => setModal(null)}><JoinServerForm post={simplePost} close={() => setModal(null)} /></Modal>}
       {modal === 'profile' && <Modal title="Profile & privacy" close={() => setModal(null)}><ProfileForm user={data.user} refresh={load} close={() => setModal(null)} /></Modal>}
       {modal === 'webhook' && <Modal title="Webhooks" close={() => setModal(null)}><WebhookPanel channel={selectedChannel} server={selectedServer} appUrl={appUrl} create={(name) => selectedServer && selectedChannel && simplePost('/api/webhooks', { serverId: selectedServer.id, channelId: selectedChannel.id, name })} /></Modal>}
-      {modal === 'friends' && <Modal title="Friends" close={() => setModal(null)}><FriendsPanel friends={data.friends} appUrl={appUrl} post={simplePost} /></Modal>}
+      {modal === 'friends' && <Modal title="Friends" close={() => setModal(null)}><FriendsPanel friends={data.friends} appUrl={appUrl} post={simplePost} openDirect={openDirectConversation} /></Modal>}
       {historyMessage && <Modal title="Edit history" close={() => setHistoryMessage(null)}><EditHistoryPanel message={historyMessage.message} entries={historyMessage.entries} /></Modal>}
     </main>
   );
+}
+
+function RecentConversations({ conversations, selectedId, openConversation, openModal }: { conversations: DirectConversation[]; selectedId: string; openConversation: (conversation: DirectConversation) => void; openModal: (modal: Modal) => void }) {
+  return <>
+    <div className="side-head">
+      <div className="side-title"><span>Recent Conversations</span></div>
+      <div className="server-desc">Private chats ordered by latest activity.</div>
+    </div>
+    <div className="channel-list conversation-list">
+      {conversations.map((conversation) => (
+        <button key={conversation.id} className={`conversation-item ${conversation.id === selectedId ? 'active' : ''}`} onClick={() => openConversation(conversation)}>
+          <Avatar user={conversation} />
+          <div className="conversation-copy">
+            <div className="conversation-title"><span className={`presence-dot ${conversation.online ? 'online' : 'offline'}`} /> {conversation.displayName}</div>
+            <div className="conversation-last">{conversation.lastMessage || 'Start conversation'}</div>
+          </div>
+        </button>
+      ))}
+      {!conversations.length && <div className="empty">No conversations.</div>}
+      <button className="secondary side-action" onClick={() => openModal('friends')}>Invite friends</button>
+    </div>
+  </>;
 }
 
 function MessageRow({ message, currentUserId, canDelete, onEdit, onDelete, onHistory }: { message: Message; currentUserId: string; canDelete: boolean; onEdit: (messageId: string, content: string) => Promise<boolean>; onDelete: (messageId: string) => Promise<void>; onHistory: (message: Message) => Promise<void> }) {
@@ -475,6 +546,10 @@ function MessageRow({ message, currentUserId, canDelete, onEdit, onDelete, onHis
   return <article className={`message ${sending ? 'message-sending' : ''} ${failed ? 'message-failed' : ''}`}>
     <Avatar user={message} />
     <div className="message-main">
+      {!message.localStatus && <div className="message-actions floating-actions">
+        {canEdit && !editing && <button type="button" title="Edit message" onClick={() => setEditing(true)}><Icon name="pen" /></button>}
+        {canDelete && <button type="button" title="Delete message" className="danger-action" onClick={() => void onDelete(message.id)}><Icon name="trash" /></button>}
+      </div>}
       <div className="message-meta">
         <span className="message-name" style={nameStyle(message.font, message.nameColor)}>{message.displayName}</span>
         <span className="message-time">{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -495,11 +570,24 @@ function MessageRow({ message, currentUserId, canDelete, onEdit, onDelete, onHis
       )}
       {message.localError && <div className="message-error">{message.localError}</div>}
       {message.attachmentUrl && <MessageAttachment message={message} />}
-      {!message.localStatus && <div className="message-actions">
-        {canEdit && !editing && <button type="button" onClick={() => setEditing(true)}>Edit</button>}
-        {message.editedAt && <button type="button" onClick={() => void onHistory(message)}>History</button>}
-        {canDelete && <button type="button" className="danger-action" onClick={() => void onDelete(message.id)}>Delete</button>}
-      </div>}
+    </div>
+  </article>;
+}
+
+function DirectMessageRow({ message }: { message: DirectMessage }) {
+  const failed = message.localStatus === 'failed';
+  const sending = message.localStatus === 'sending';
+  return <article className={`message ${sending ? 'message-sending' : ''} ${failed ? 'message-failed' : ''}`}>
+    <Avatar user={message} />
+    <div className="message-main">
+      <div className="message-meta">
+        <span className="message-name" style={nameStyle(message.font, message.nameColor)}>{message.displayName}</span>
+        <span className="message-time">{new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        {sending && <span className="pending-pill">sending</span>}
+        {failed && <span className="failed-pill">blocked</span>}
+      </div>
+      <div className="message-content">{message.content}</div>
+      {message.localError && <div className="message-error">{message.localError}</div>}
     </div>
   </article>;
 }
@@ -518,33 +606,47 @@ function AttachmentChip({ attachment, remove }: { attachment: AttachmentDraft; r
   </div>;
 }
 
-function HomeStage({ user, officialServer, openServer, openModal, appUrl }: { user: User; officialServer?: Server; openServer: (server: Server) => void; openModal: (modal: Modal) => void; appUrl: string }) {
-  return (
-    <div className="home-stage">
-      <section className="welcome-card">
-        <div className="welcome-mark"><img src="/assets/brand/distopia-app-icon.webp" alt="" /></div>
-        <div>
-          <p className="eyebrow">Distopia</p>
-          <h1>Minimal community OS.</h1>
-          <p>Welcome, <strong style={nameStyle(user.font, user.nameColor)}>{user.displayName}</strong>. Start with one action. No dashboard noise.</p>
-        </div>
-      </section>
-      <section className="quick-grid">
-        <button className="quick-card" onClick={() => openModal('friends')}><Icon name="user-plus" /><span>Invite friends</span><small>Generate an add link.</small></button>
-        <button className="quick-card" onClick={() => openModal('server')}><Icon name="server-plus" /><span>Create server</span><small>Launch a new space.</small></button>
-        <button className="quick-card" onClick={() => openModal('join')}><Icon name="login" /><span>Join server</span><small>Use invite code.</small></button>
-      </section>
-      {officialServer && (
-        <section className="official-card">
-          <div className="official-copy">
-            <div className="official-icon"><ServerIcon server={officialServer} /></div>
-            <div><h2>{officialServer.name}</h2><p>{officialServer.description}</p></div>
-          </div>
-          <div className="official-actions"><div className="copy-box">{appUrl}/join/{officialServer.vanityCode}</div><button className="primary" onClick={() => openServer(officialServer)}>Open official</button></div>
-        </section>
-      )}
+function HomeStage({ user, openModal, openAi }: { user: User; openModal: (modal: Modal) => void; openAi: () => void }) {
+  return <div className="home-stage">
+    <section className="welcome-card">
+      <div className="welcome-mark"><img src="/assets/brand/distopia-app-icon.webp" alt="" /></div>
+      <div>
+        <p className="eyebrow">Distopia</p>
+        <h1>Minimal community OS.</h1>
+        <p>Welcome, <strong style={nameStyle(user.font, user.nameColor)}>{user.displayName}</strong>. Start with one action. No dashboard noise.</p>
+      </div>
+    </section>
+    <section className="quick-grid">
+      <button className="quick-card" onClick={() => openModal('friends')}><Icon name="user-plus" /><span>Invite friends</span><small>Generate an add link.</small></button>
+      <button className="quick-card" onClick={() => openModal('server')}><Icon name="server-plus" /><span>Create server</span><small>Launch a new space.</small></button>
+      <button className="quick-card" onClick={() => openModal('join')}><Icon name="login" /><span>Join server</span><small>Use invite code.</small></button>
+      <button className="quick-card" onClick={openAi}><Icon name="sparkles" /><span>Distopia AI</span><small>Open your assistant.</small></button>
+    </section>
+  </div>;
+}
+
+function ServerPeoplePanel({ user, selectedServer, appUrl, activeMembers, inactiveMembers, openProfile, logout, onMemberContext }: { user: User; selectedServer?: Server; appUrl: string; activeMembers: Member[]; inactiveMembers: Member[]; openProfile: () => void; logout: () => Promise<void>; onMemberContext: (event: MouseEvent, member: Member) => void }) {
+  return <div className="panel-scroll">
+    <div className="card identity-card"><h3>Identity</h3><IdentityRow user={user} /><div className="mini-grid"><button className="secondary" onClick={openProfile}>Edit</button><button className="danger" onClick={() => void logout()}>Exit</button></div></div>
+    <div className="card members-card"><h3>Active</h3>{activeMembers.map((member) => <MemberRow key={member.id} member={member} onContext={onMemberContext} />)}{!activeMembers.length && <div className="empty compact">No active members.</div>}</div>
+    <div className="card members-card"><h3>Inactive</h3>{inactiveMembers.map((member) => <MemberRow key={member.id} member={member} inactive onContext={onMemberContext} />)}{!inactiveMembers.length && <div className="empty compact">No inactive members.</div>}</div>
+    <div className="card"><h3>Public embed</h3><div className="copy-box">{selectedServer ? `${appUrl}/embed/server/${selectedServer.id}` : 'No server'}</div></div>
+  </div>;
+}
+
+function HomePeoplePanel({ user, aiConversation, onlineFriends, openProfile, logout, openConversation, onFriendContext }: { user: User; aiConversation?: DirectConversation; onlineFriends: Friend[]; openProfile: () => void; logout: () => Promise<void>; openConversation: (conversation: DirectConversation) => void; onFriendContext: (event: MouseEvent, friend: Friend) => void }) {
+  return <div className="panel-scroll">
+    <div className="card identity-card"><h3>Identity</h3><IdentityRow user={user} /><div className="mini-grid"><button className="secondary" onClick={openProfile}>Edit</button><button className="danger" onClick={() => void logout()}>Exit</button></div></div>
+    <div className="card members-card"><h3>Online Friends</h3>
+      {aiConversation && <button className="member member-button" onClick={() => openConversation(aiConversation)}><Avatar user={aiConversation} /><div><div className="member-name" style={nameStyle(aiConversation.font, aiConversation.nameColor)}>{aiConversation.displayName}</div><div className="member-role"><span className="presence-dot online" /> assistant</div></div></button>}
+      {onlineFriends.map((friend) => <FriendRow key={friend.id} friend={friend} onContext={onFriendContext} />)}
+      {!onlineFriends.length && !aiConversation && <div className="empty compact">No online friends.</div>}
     </div>
-  );
+  </div>;
+}
+
+function IdentityRow({ user }: { user: User }) {
+  return <div className="member self-card"><Avatar user={user} /><div><div className="member-name" style={nameStyle(user.font, user.nameColor)}>{user.displayName}</div><div className="member-role"><span className="presence-dot online" /> @{user.username}</div></div></div>;
 }
 
 function ActionMenu({ open, canUseServer }: { open: (modal: Modal) => void; canUseServer: boolean }) {
@@ -556,6 +658,13 @@ function ActionMenu({ open, canUseServer }: { open: (modal: Modal) => void; canU
     <button onClick={() => open('webhook')} disabled={!canUseServer}><Icon name="webhook" /> Webhook</button>
     <button onClick={() => open('friends')}><Icon name="user-plus" /> Friends</button>
     <button onClick={() => open('join')}><Icon name="door" /> Join</button>
+  </div>;
+}
+
+function ProfileContextMenu({ menu, close, openDirect }: { menu: { x: number; y: number; user: ProfileLike }; close: () => void; openDirect: (peerId: string) => Promise<void> }) {
+  return <div className="profile-context" style={{ left: menu.x, top: menu.y }} onClick={(event) => event.stopPropagation()}>
+    <div className="profile-context-title">{menu.user.displayName}</div>
+    <button onClick={() => { close(); void openDirect(menu.user.id); }}><Icon name="send" /> Send message</button>
   </div>;
 }
 
@@ -605,8 +714,8 @@ function InvitePanel({ server, appUrl, create }: { server?: Server; appUrl: stri
 }
 
 function JoinServerForm({ post, close }: { post: (url: string, body: Record<string, unknown>, after?: () => void) => Promise<unknown>; close: () => void }) {
-  const [code, setCode] = useState('distopia');
-  return <form onSubmit={(e) => { e.preventDefault(); void post('/api/servers/join-by-code', { code }, close); }}><label className="field"><span>Invite code</span><input className="input" value={code} onChange={(e) => setCode(e.target.value)} minLength={2} maxLength={64} required /></label><button className="primary">Join</button></form>;
+  const [code, setCode] = useState('');
+  return <form onSubmit={(e) => { e.preventDefault(); void post('/api/servers/join-by-code', { code }, close); }}><label className="field"><span>Invite code</span><input className="input" value={code} onChange={(e) => setCode(e.target.value)} minLength={2} maxLength={64} required placeholder="invite-code" /></label><button className="primary">Join</button></form>;
 }
 
 function WebhookPanel({ channel, server, appUrl, create }: { channel?: Channel; server?: Server; appUrl: string; create: (name: string) => Promise<unknown> | unknown }) {
@@ -615,37 +724,30 @@ function WebhookPanel({ channel, server, appUrl, create }: { channel?: Channel; 
   return <div><p className="server-desc">Incoming POST creates a message in #{channel?.name}. Payload: JSON with content.</p><label className="field"><span>Name</span><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></label><button className="primary" disabled={!server || !channel} onClick={async () => { const hook = await create(name) as { webhook?: { token?: string } } | null; if (hook?.webhook?.token) setUrl(`${appUrl}/api/webhooks/${hook.webhook.token}`); }}>Create webhook</button>{url && <><br /><br /><div className="copy-box">{url}</div></>}</div>;
 }
 
-function FriendsPanel({ friends, appUrl, post }: { friends: Friend[]; appUrl: string; post: (url: string, body: Record<string, unknown>) => Promise<unknown> }) {
+function FriendsPanel({ friends, appUrl, post, openDirect }: { friends: Friend[]; appUrl: string; post: (url: string, body: Record<string, unknown>) => Promise<unknown>; openDirect: (peerId: string) => Promise<void> }) {
   const [link, setLink] = useState('');
-  return <div className="panel-scroll modal-scroll"><div className="card embedded"><h3>Friend invite</h3><button className="primary" onClick={async () => { const data = await post('/api/friend-invites', {}) as { invite?: { code?: string } } | null; if (data?.invite?.code) setLink(`${appUrl}/api/friend-invites/${data.invite.code}/use`); }}>Generate add link</button>{link && <><br /><br /><div className="copy-box">POST {link}</div></>}</div><div className="card embedded"><h3>Friends</h3>{friends.map((friend) => <div className="member" key={friend.id}><Avatar user={friend} /><div><div className="member-name" style={nameStyle(friend.font, friend.nameColor)}>{friend.displayName}</div><div className="member-role">{friend.status} · {friend.direction}</div></div>{friend.status === 'pending' && friend.direction === 'incoming' && <button className="secondary" onClick={() => post('/api/friends/accept', { friendId: friend.id })}>Accept</button>}</div>)}{!friends.length && <div className="empty compact">No friends yet.</div>}</div></div>;
-}
-
-function EditHistoryPanel({ message, entries }: { message: Message; entries: EditHistory[] }) {
-  return <div className="edit-history">
-    <div className="copy-box">Current: {message.content}</div>
-    {!entries.length && <div className="empty compact">No edit history.</div>}
-    {entries.map((entry) => <div className="history-entry" key={entry.id}>
-      <div className="message-meta"><span className="message-name">{entry.displayName}</span><span className="message-time">{new Date(entry.createdAt).toLocaleString()}</span></div>
-      <div className="history-label">Before</div>
-      <div className="history-content">{entry.previousContent}</div>
-      <div className="history-label">After</div>
-      <div className="history-content">{entry.newContent}</div>
-    </div>)}
-  </div>;
+  return <div className="panel-scroll modal-scroll"><div className="card embedded"><h3>Friend invite</h3><button className="primary" onClick={async () => { const data = await post('/api/friend-invites', {}) as { invite?: { code?: string } } | null; if (data?.invite?.code) setLink(`${appUrl}/api/friend-invites/${data.invite.code}/use`); }}>Generate add link</button>{link && <><br /><br /><div className="copy-box">POST {link}</div></>}</div><div className="card embedded"><h3>Friends</h3>{friends.map((friend) => <div className="member" key={friend.id}><Avatar user={friend} /><div><div className="member-name" style={nameStyle(friend.font, friend.nameColor)}>{friend.displayName}</div><div className="member-role">{friend.status} · {friend.direction}</div></div>{friend.status === 'pending' && friend.direction === 'incoming' && <button className="secondary" onClick={() => post('/api/friends/accept', { friendId: friend.id })}>Accept</button>}{friend.status === 'accepted' && <button className="secondary" onClick={() => void openDirect(friend.otherId)}>Message</button>}</div>)}{!friends.length && <div className="empty compact">No friends yet.</div>}</div></div>;
 }
 
 function ProfileForm({ user, refresh, close }: { user: User; refresh: () => Promise<void>; close: () => void }) {
   const [error, setError] = useState('');
-  const premadeAvatars = useMemo(() => Array.from({ length: 8 }, (_, index) => `/assets/premade-avatars/distopia-avatar-${index + 1}.webp`), []);
-  const [selectedAvatar, setSelectedAvatar] = useState(user.avatarUrl.startsWith('/assets/premade-avatars/') ? user.avatarUrl : '');
-
+  const [selectedAvatar, setSelectedAvatar] = useState(user.avatarUrl);
+  const premadeAvatars = Array.from({ length: 8 }, (_, i) => `/assets/premade-avatars/distopia-avatar-${i + 1}.webp`);
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError('');
     const form = new FormData(event.currentTarget);
-    form.set('avatarPreset', selectedAvatar);
-    const jsonBody = Object.fromEntries(form.entries());
-    const response = await fetch('/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(jsonBody) });
+    const payload = {
+      displayName: String(form.get('displayName') || user.displayName),
+      bio: String(form.get('bio') || ''),
+      theme: String(form.get('theme') || user.theme),
+      nameColor: String(form.get('nameColor') || user.nameColor),
+      font: String(form.get('font') || user.font),
+      avatarPreset: selectedAvatar,
+      allowFriendRequests: form.get('allowFriendRequests') === 'on',
+      allowServerInvites: form.get('allowServerInvites') === 'on'
+    };
+    const response = await fetch('/api/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const json = await response.json();
     if (!json.ok) { setError(json.error); return; }
     const image = form.get('avatar') as File | null;
@@ -664,7 +766,6 @@ function ProfileForm({ user, refresh, close }: { user: User; refresh: () => Prom
     await refresh();
     close();
   }
-
   return <form onSubmit={save}>
     <label className="field"><span>Display name</span><input className="input" name="displayName" defaultValue={user.displayName} minLength={2} maxLength={32} /></label>
     <label className="field"><span>Bio</span><textarea className="textarea" name="bio" defaultValue={user.bio} maxLength={180} /></label>
@@ -679,8 +780,12 @@ function ProfileForm({ user, refresh, close }: { user: User; refresh: () => Prom
   </form>;
 }
 
-function MemberRow({ member, inactive = false }: { member: Member; inactive?: boolean }) {
-  return <div className={`member ${inactive ? 'inactive-member' : ''}`}><Avatar user={member} /><div><div className="member-name" style={nameStyle(member.font, member.nameColor)}>{member.nickname || member.displayName}</div><div className="member-role"><span className={`presence-dot ${inactive ? 'offline' : 'online'}`} /> {member.role}</div></div></div>;
+function MemberRow({ member, inactive = false, onContext }: { member: Member; inactive?: boolean; onContext: (event: MouseEvent, member: Member) => void }) {
+  return <div className={`member ${inactive ? 'inactive-member' : ''}`} onContextMenu={(event) => onContext(event, member)}><Avatar user={member} /><div><div className="member-name" style={nameStyle(member.font, member.nameColor)}>{member.nickname || member.displayName}</div><div className="member-role"><span className={`presence-dot ${inactive ? 'offline' : 'online'}`} /> {member.role}</div></div></div>;
+}
+
+function FriendRow({ friend, onContext }: { friend: Friend; onContext: (event: MouseEvent, friend: Friend) => void }) {
+  return <div className="member" onContextMenu={(event) => onContext(event, friend)}><Avatar user={friend} /><div><div className="member-name" style={nameStyle(friend.font, friend.nameColor)}>{friend.displayName}</div><div className="member-role"><span className="presence-dot online" /> @{friend.username}</div></div></div>;
 }
 
 function Avatar({ user, small = false }: { user: { id: string; avatarUrl: string; displayName: string }; small?: boolean }) {
@@ -689,12 +794,25 @@ function Avatar({ user, small = false }: { user: { id: string; avatarUrl: string
 
 function ServerIcon({ server }: { server: Server }) {
   if (server.iconUrl) return <img src={server.iconUrl} alt="" />;
-  if (server.vanityCode === 'distopia') return <img src="/assets/brand/distopia-app-icon.webp" alt="" />;
   return <span>{server.name.slice(0, 1).toUpperCase()}</span>;
 }
 
 function Icon({ name }: { name: string }) {
   return <img className="icon" src={`/assets/icons/${name}.svg`} alt="" aria-hidden="true" />;
+}
+
+function EditHistoryPanel({ message, entries }: { message: Message; entries: EditHistory[] }) {
+  return <div className="edit-history"><div className="history-entry"><div className="history-label">Current</div><div className="history-content">{message.content}</div></div>{entries.map((entry) => <div className="history-entry" key={entry.id}><div className="history-label">{new Date(entry.createdAt).toLocaleString()}</div><div className="history-content">Before: {entry.previousContent}</div><div className="history-content">After: {entry.newContent}</div></div>)}{!entries.length && <div className="empty compact">No edits yet.</div>}</div>;
+}
+
+function openProfileMenu(event: MouseEvent, user: ProfileLike, setProfileMenu: (menu: { x: number; y: number; user: ProfileLike } | null) => void, currentUserId: string) {
+  if (user.id === currentUserId) return;
+  event.preventDefault();
+  setProfileMenu({ x: Math.min(event.clientX, window.innerWidth - 210), y: Math.min(event.clientY, window.innerHeight - 120), user });
+}
+
+function friendToProfile(friend: Friend): ProfileLike {
+  return { id: friend.otherId, username: friend.username, displayName: friend.displayName, avatarUrl: friend.avatarUrl, nameColor: friend.nameColor, font: friend.font, online: friend.online };
 }
 
 function defaultAvatarUrl(seed: string): string {
@@ -750,7 +868,7 @@ function fontStack(font: string): string {
 }
 
 function normalizeBootstrap(data: Bootstrap): Bootstrap {
-  return { ...data, channels: data.channels.map(normalizeChannel), messages: normalizeMessages(data.messages) };
+  return { ...data, channels: data.channels.map(normalizeChannel), messages: normalizeMessages(data.messages), directConversations: normalizeDirectConversations(data.directConversations || []), directMessages: normalizeDirectMessages(data.directMessages || []) };
 }
 
 function normalizeChannel(channel: Channel): Channel {
@@ -765,7 +883,20 @@ function normalizeMessage(message: Message): Message {
   return { ...message, attachmentName: message.attachmentName || '', attachmentMime: message.attachmentMime || '', attachmentSize: Number(message.attachmentSize || 0), editedAt: message.editedAt || '', editHistoryCount: Number(message.editHistoryCount || 0) };
 }
 
+function normalizeDirectConversations(conversations: DirectConversation[]): DirectConversation[] {
+  return conversations.map((conversation) => ({ ...conversation, lastMessage: conversation.lastMessage || '', lastMessageAt: conversation.lastMessageAt || conversation.updatedAt || '' }));
+}
+
+function normalizeDirectMessages(messages: DirectMessage[]): DirectMessage[] {
+  return messages.map((message) => ({ ...message, editedAt: message.editedAt || '' }));
+}
+
 function mergeMessages(remote: Message[], local: Message[]): Message[] {
+  const remoteIds = new Set(remote.map((message) => message.id));
+  return [...remote, ...local.filter((message) => !remoteIds.has(message.id))].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+function mergeDirectMessages(remote: DirectMessage[], local: DirectMessage[]): DirectMessage[] {
   const remoteIds = new Set(remote.map((message) => message.id));
   return [...remote, ...local.filter((message) => !remoteIds.has(message.id))].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 }
